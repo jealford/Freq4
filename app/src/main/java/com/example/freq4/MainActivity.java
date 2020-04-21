@@ -42,6 +42,7 @@ public class MainActivity extends Activity {
     boolean freqFound = true; //set to true for testing, code needs to change this to true only when one of the freqs are found
     int volumeLevel = 0;
     ToggleButton startStopToggle;
+    boolean searching = false;
 
 
     @Override
@@ -73,10 +74,10 @@ public class MainActivity extends Activity {
 
     protected void onResume() {
         super.onResume();
+        freqText.setText("Ready To Scan");
         //audio = new AudioRecord(MediaRecorder.AudioSource.MIC, sampleRate,
                 //AudioFormat.CHANNEL_IN_MONO,
                 //AudioFormat.ENCODING_PCM_16BIT, bufferSize);
-
         startStopToggle.setChecked(false);
         startStopToggle.setOnCheckedChangeListener(new CompoundButton.OnCheckedChangeListener() {
 
@@ -89,9 +90,10 @@ public class MainActivity extends Activity {
                             AudioFormat.ENCODING_PCM_16BIT, bufferSize);
                     //onResume();
                    System.out.println("toggle on");
-
+                    searching = true;
 
                     if (permissionToRecord) {
+
                         audio.startRecording();
                         thread = new Thread(new Runnable() {
                             public void run() {
@@ -153,7 +155,10 @@ public class MainActivity extends Activity {
                                             }
                                             //String volume = Double.toString(lastLevel);
                                             String frequecy = Double.toString(freq);
-                                            if (freq >= 375 && freq <= 425){
+                                            if (!searching){
+                                                freqText.setText("Ready to Search");
+                                            }
+                                            else if (freq >= 375 && freq <= 425){
                                                 freqText.setText("400 HZ");
                                             }
                                             else if (freq >= 575 && freq <= 625){
@@ -176,23 +181,33 @@ public class MainActivity extends Activity {
 
 
                 } else {
+                    searching = false;
+
+
+                    //freqText = (TextView) findViewById(R.id.freqText);
+                    //freqText.setText("Ready To Scan");
                     thread.interrupt();
                     thread = null;
+
                     try {
                         if (audio != null) {
                             audio.stop();
                             audio.release();
                             audio = null;
                         }
+
+                        //freqText.setText("Ready To Scan");
                     } catch (Exception e) {e.printStackTrace();}
 
 
                 }
+                //freqText.setText("Ready 890 Scan");
             }
+            //freqText.setText("Ready To Scan");
         });
 
 
-
+        //freqText.setText("Ready Scan");
 
     }//onResume
 
@@ -200,18 +215,18 @@ public class MainActivity extends Activity {
         //volumeLevel = 0;
         volume = Math.abs(volume);
         if (freq >= 375 && freq <= 425){ // 400Hz
-            if(volume < 3.2) return 1;
-            else if(volume < 6.2) return 2;
+            if(volume < 5.3) return 1;
+            else if(volume < 10.3) return 2;
             else return 3;
         }
         else if (freq >= 575 && freq <= 625){// 600Hz
-            if(volume < 2.75) return 1;
-            else if(volume < 5.2) return 2;
+            if(volume < 3.0) return 1;
+            else if(volume < 4.6) return 2;
             else return 3;
         }
         else if (freq >= 775 && freq <= 825){// 800Hz
-            if(volume < 1.9) return 1;
-            else if(volume < 3.4) return 2;
+            if(volume < 7) return 1;
+            else if(volume < 16) return 2;
             else return 3;
         }
         else {
@@ -289,7 +304,9 @@ public class MainActivity extends Activity {
     @Override
     protected void onPause() {
         super.onPause();
-        thread.interrupt();
+        if(thread != null){
+            thread.interrupt();
+        }
         thread = null;
         try {
             if (audio != null) {
