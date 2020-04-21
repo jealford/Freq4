@@ -21,45 +21,47 @@ import java.util.List;
 
 public class MainActivity extends Activity {
 
-    static final int sampleRate = 8000;
-    AudioRecord audio;
-    int bufferSize; //512 on emulator
-    double lastLevel = 0;
-    Thread thread;
-    static final int SAMPLE_DELAY = 75; //was 75
-    boolean permissionToRecord;
-    TextView volumeText;
-    TextView freqText;
-    TextView ampText;
-    double volume = 0;
-    double freq = 0;
-    byte loop = 0;
-    List volumeList = new LinkedList();
-    double[] volumeArray = new double[5];
-    boolean quietSet = false;
-    double quietLevel = 0;
-    double[] freqArray = new double[5];
-    boolean freqFound = true; //set to true for testing, code needs to change this to true only when one of the freqs are found
-    int volumeLevel = 0;
-    ToggleButton startStopToggle;
-    boolean searching = false;
+    private static final int sampleRate = 8000;
+    private AudioRecord audio;
+    private int bufferSize;
+    private double lastLevel = 0;
+    private Thread thread;
+    private static final int SAMPLE_DELAY = 75;
+    private boolean permissionToRecord;
+    private TextView volumeText;
+    private TextView freqText;
+    private TextView ampText;
+    private double volume = 0;
+    private double freq = 0;
+    private byte loop = 0;
+    private double[] volumeArray = new double[5];
+    private boolean quietSet = false;
+    private double quietLevel = 0;
+    private double[] freqArray = new double[5];
+    private boolean freqFound = true;
+    private int volumeLevel = 0;
+    private ToggleButton startStopToggle;
+    private boolean searching = false;
 
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
-        setContentView(R.layout.activity_main);
 
+        //set up UI elements
+        setContentView(R.layout.activity_main);
         volumeText = (TextView) findViewById(R.id.volumeText);
         freqText = (TextView) findViewById(R.id.freqText);
         ampText = (TextView) findViewById(R.id.ampText);
         startStopToggle = findViewById(R.id.startStop);
 
+        //check for microphone permissions
         permissionToRecord = ActivityCompat.checkSelfPermission(
                 this,
                 Manifest.permission.RECORD_AUDIO
         ) == PackageManager.PERMISSION_GRANTED;
 
+        //get the size for the smallest buffer
         try {
             bufferSize = AudioRecord
                     .getMinBufferSize(sampleRate, AudioFormat.CHANNEL_IN_MONO,
@@ -67,97 +69,83 @@ public class MainActivity extends Activity {
         } catch (Exception e) {
             android.util.Log.e("TrackingFlow", "Exception", e);
         }
-
-
-
-    }
+    }//onCreate
 
     protected void onResume() {
         super.onResume();
+
         freqText.setText("Ready To Scan");
-        //audio = new AudioRecord(MediaRecorder.AudioSource.MIC, sampleRate,
-                //AudioFormat.CHANNEL_IN_MONO,
-                //AudioFormat.ENCODING_PCM_16BIT, bufferSize);
+
+        //set up toggle for start/stop scan
         startStopToggle.setChecked(false);
         startStopToggle.setOnCheckedChangeListener(new CompoundButton.OnCheckedChangeListener() {
 
             public void onCheckedChanged(CompoundButton buttonView, boolean isChecked) {
-
-
+                //if toggled on
                 if (isChecked) {
                     audio = new AudioRecord(MediaRecorder.AudioSource.MIC, sampleRate,
                             AudioFormat.CHANNEL_IN_MONO,
                             AudioFormat.ENCODING_PCM_16BIT, bufferSize);
-                    //onResume();
-                   System.out.println("toggle on");
+
                     searching = true;
 
                     if (permissionToRecord) {
-
                         audio.startRecording();
                         thread = new Thread(new Runnable() {
                             public void run() {
                                 while (thread != null && !thread.isInterrupted()) {
-                                    //sleep thread for approximate sampling time
+                                    //sleep thread for approximate sampling time to capture min
+                                    //buffer amount of data
                                     try {
                                         Thread.sleep(SAMPLE_DELAY);
                                     } catch (InterruptedException ie) {
                                         ie.printStackTrace();
                                     }
+
+
                                     readAudioBuffer();
 
+                                    //capture 5 sample iterations
+                                    if (loop < 5){
+                                        freqArray[loop] = freq;
+                                        volumeArray[loop] = lastLevel;
+                                        loop++;
+                                    }
+
+                                    //then average those samples for smoother volume measurement
+                                    if (loop == 5) {
+                                        lastLevel = 0;
+                                        for(double i : volumeArray) {
+                                            lastLevel += i;
+                                        }
+                                        lastLevel /= 5;
+
+                                        //quietLevel needs to be set by first sample iteration
+                                        if (quietSet && freqFound){
+                                            volume = quietLevel - lastLevel;
+                                            volumeLevel = setVolumeLevel(freq);
+                                            loop = 0;
+                                        }
+                                        else{
+                                            quietLevel = lastLevel;
+                                            quietSet = true;
+                                        }
+                                    }// loop == 5
+
+                                    //update the UI with relevant info
                                     runOnUiThread(new Runnable() {
 
                                         @Override
                                         public void run() {
 
-                                            //capture 5 sample iterations
-                                            if (loop < 5){
-                                                freqArray[loop] = freq;
-                                                volumeArray[loop] = lastLevel;
-                                                loop++;
-                                            }
+                                            String volumeString = Integer.toString(volumeLevel);
+                                            volumeText.setText(volumeString);
 
-                                            //then average those samples for smoother volume measurement
-                                            if (loop == 5) {
-                                                lastLevel = 0;
-                                                for(double i : volumeArray) {
-                                                    lastLevel += i;
+                                            String ampString = Double.toString(volume);
+                                            ampText.setText(ampString);
 
-
-                                                }
-                                                lastLevel /= 5;
-
-
-
-                                                //quietLevel needs to be set by first sample iteration
-                                                if (quietSet && freqFound){
-
-                                                    volume = quietLevel - lastLevel;
-
-                                                    volumeLevel = setVolumeLevel(freq);
-                                                    String volumeString = Integer.toString(volumeLevel);
-                                                    volumeText.setText(volumeString);
-
-
-                                                    String ampString = Double.toString(volume);
-                                                    ampText.setText(ampString);
-
-                                                    loop = 0;
-
-                                                }
-                                                else{
-                                                    quietLevel = lastLevel;
-                                                    quietSet = true;
-                                                }
-
-
-                                            }
-                                            //String volume = Double.toString(lastLevel);
                                             String frequecy = Double.toString(freq);
-                                            if (!searching){
-                                                freqText.setText("Ready to Search");
-                                            }
+                                            if (!searching) freqText.setText("Ready to Search");
                                             else if (freq >= 375 && freq <= 425){
                                                 freqText.setText("400 HZ");
                                             }
@@ -179,40 +167,32 @@ public class MainActivity extends Activity {
                         thread.start();
                     }// if permissionToRecord
 
-
-                } else {
+                }
+                // if un-toggled
+                else {
                     searching = false;
-
-
-                    //freqText = (TextView) findViewById(R.id.freqText);
-                    //freqText.setText("Ready To Scan");
                     thread.interrupt();
                     thread = null;
-
                     try {
                         if (audio != null) {
                             audio.stop();
                             audio.release();
                             audio = null;
                         }
-
-                        //freqText.setText("Ready To Scan");
                     } catch (Exception e) {e.printStackTrace();}
-
-
                 }
-                //freqText.setText("Ready 890 Scan");
+
             }
             //freqText.setText("Ready To Scan");
         });
-
-
-        //freqText.setText("Ready Scan");
-
     }//onResume
 
+    /**
+    * Method that takes in a frequency and takes the volume level and returns an int
+    * for the volume level requiement of 0,1,2, or 3
+     **/
+
     private int setVolumeLevel(double freq){
-        //volumeLevel = 0;
         volume = Math.abs(volume);
         if (freq >= 375 && freq <= 425){ // 400Hz
             if(volume < 5.3) return 1;
@@ -231,11 +211,12 @@ public class MainActivity extends Activity {
         }
         else {
             return 0;
-            //freqText.setText("Searching...");
         }
     }
 
-     //Functionality that gets the sound level out of the sample
+    /**
+     * Method that gets the sound level out of the sample
+     **/
     private void readAudioBuffer() {
 
         try {
@@ -244,29 +225,18 @@ public class MainActivity extends Activity {
             int bufferReadResult = 1;
 
             if (audio != null) {
-
-
-
                 // Sense sound level
                 bufferReadResult = audio.read(buffer, 0, bufferSize);
-                double sumLevel = 0;
+                double maxLevel = 0;
                 freq = 0;
 
                 int negInd = 0;
-                int posInd = 0;
-
                 List cross = new LinkedList();
-                //System.out.print("buffer: ");
-                //System.out.println(bufferReadResult);
+
                 for (int i = 0; i < bufferReadResult; i++) {
-                    //System.out.println(buffer[i]);
-                    if(Math.abs(buffer[i]) > sumLevel){
-                        sumLevel = Math.abs(buffer[i]);
-                        //System.out.print("max: ");
-                        //System.out.println(sumLevel);
+                    if(Math.abs(buffer[i]) > maxLevel){
+                        maxLevel = Math.abs(buffer[i]);
                     }
-                    //sumLevel += buffer[i];
-                    //System.out.println(buffer[i]);
 
                     //find where wave cross x axis from negative y's to positive  y's
                     if(i < (bufferReadResult - 1) && buffer[i] <= 0 && buffer[i+1] >= 0){
@@ -281,19 +251,10 @@ public class MainActivity extends Activity {
                     double rate = 1.0/8000.0;
                     double period = numSamples * rate;
                     freq += (1.0/period);
-                    //System.out.println(freq);
                 }
 
-
-
-                //System.out.println("--------------------------------------");
-
-                lastLevel = Math.abs((sumLevel / bufferReadResult));
+                lastLevel = Math.abs(maxLevel);
                 freq /= (cross.size() - 1);
-                //if (lastLevel > 2) {
-                  //  System.out.println(freq);
-                //}
-
             }
 
         } catch (Exception e) {
@@ -317,30 +278,3 @@ public class MainActivity extends Activity {
         } catch (Exception e) {e.printStackTrace();}
     }
 }//MainActivity
-
-
-
-
-                /*
-                int index = 0;
-
-                for (int i = 0; i < bufferReadResult;) {
-                    int low = (int) buffer[i];
-                    i++;
-                    int high = (int) buffer[i];
-                    i++;
-                    int sample = (high << 8) + (low & 0x00ff);
-                    samples[index] = sample;
-                    System.out.println(sample);
-                    index++;
-                }
-                */
-
-//System.out.println(negInd);
-//System.out.print("posInd: ");
-//System.out.println(posInd);
-//volumeText.setText(volume);
-
-//if (lastLevel > 2.0){
-//freqText.setText(frequecy);
-//}
